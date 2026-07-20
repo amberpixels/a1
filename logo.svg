@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 99" width="144" height="99" xml:space="preserve">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 156 100" width="156" height="100" xml:space="preserve">
   <style>
     text { font-family: 'Menlo','Consolas','DejaVu Sans Mono',monospace; font-size: 26px; font-weight: 700; white-space: pre; }
   </style>
-  <rect width="144" height="99" fill="transparent"/>
-  <!-- A -->
-  <text x="8" y="26" fill="#FBBF24">░█▀█</text>
-  <text x="8" y="48" fill="#FBBF24">░█▀█</text>
-  <text x="8" y="70" fill="#FBBF24">░▀░▀</text>
-  <!-- 1 (dropped) -->
-  <text x="74" y="46" fill="#F97316">░▄█░</text>
-  <text x="74" y="68" fill="#F97316">░░█░</text>
-  <text x="74" y="90" fill="#F97316">░▀▀▀</text>
+  <rect width="156" height="100" fill="transparent"/>
+  <!-- A (Anthropic clay) -->
+  <text x="8" y="26" fill="#D97757">░█▀▀█</text>
+  <text x="8" y="48" fill="#D97757">░█▄▄█</text>
+  <text x="8" y="70" fill="#D97757">░█─░█</text>
+  <!-- 1 (Go cyan, dropped) -->
+  <text x="90" y="46" fill="#00ADD8"> ▄█</text>
+  <text x="90" y="68" fill="#00ADD8"> ░█</text>
+  <text x="90" y="90" fill="#00ADD8"> ▄█▄</text>
 </svg>
