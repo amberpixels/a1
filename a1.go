@@ -35,7 +35,9 @@ type Meta struct {
 	StopReason   string
 	InputTokens  int64
 	OutputTokens int64
-	Duration     time.Duration
+	// CostUSD is the estimated list-price cost of the call (see Cost).
+	CostUSD  float64
+	Duration time.Duration
 }
 
 // Meter observes every billed call (including failed attempts that still
@@ -89,6 +91,7 @@ func defaultMeter(ctx context.Context, task string, m Meta) {
 		"model", m.Model,
 		"input_tokens", m.InputTokens,
 		"output_tokens", m.OutputTokens,
+		"cost_usd", m.CostUSD,
 		"duration", m.Duration.Round(time.Millisecond),
 	)
 }

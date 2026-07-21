@@ -105,6 +105,7 @@ func (c *Client) once(ctx context.Context, req Request, schema map[string]any) (
 		StopReason:   string(msg.StopReason),
 		InputTokens:  msg.Usage.InputTokens,
 		OutputTokens: msg.Usage.OutputTokens,
+		CostUSD:      Cost(msg.Model, msg.Usage.InputTokens, msg.Usage.OutputTokens),
 		Duration:     time.Since(start),
 	}
 	c.meter(ctx, req.Task, meta)
