@@ -91,10 +91,10 @@ The meter fires on **every billed call**, including failed attempts that still r
 ```go
 text, _, err := c.Text(ctx, req)
 switch {
-case errors.Is(err, a1.ErrRefused):   // model/classifier declined - don't retry
-case errors.Is(err, a1.ErrTruncated): // raise MaxTokens
-case errors.Is(err, a1.ErrEmpty):     // transient; raise Attempts
-case err != nil:                      // SDK error (auth, rate limit, network...)
+case errors.Is(err, a1.ErrRefused):    // model/classifier declined - don't retry
+case errors.Is(err, a1.ErrTruncated):  // raise MaxTokens
+case errors.Is(err, a1.ErrEmpty):      // transient; raise Attempts
+case err != nil:                       // SDK error (auth, rate limit, network...)
 }
 ```
 
@@ -105,10 +105,6 @@ case err != nil:                      // SDK error (auth, rate limit, network...
 ```go
 c := a1.NewClient("test-key", a1.WithSDKOptions(option.WithBaseURL(srv.URL)))
 ```
-
-## Non-Goals
-
-Multi-provider abstraction, agent loops, chains, RAG. If you need those, you want a framework - this is a hubcap, and the wheel is the SDK.
 
 ## Feedback
 
