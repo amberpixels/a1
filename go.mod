@@ -1,8 +1,8 @@
 module github.com/amberpixels/a1
 
-go 1.26.5
+go 1.26
 
-require github.com/anthropics/anthropic-sdk-go v1.58.0
+require github.com/anthropics/anthropic-sdk-go v1.71.0
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
