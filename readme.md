@@ -43,7 +43,7 @@ text, meta, err := c.Text(ctx, a1.Request{
     Prompt:    prompt,
     MaxTokens: 1024,
 })
-// meta: Model, StopReason, InputTokens, OutputTokens, Duration
+// meta: Model, StopReason, InputTokens, OutputTokens, CostUSD, Duration
 ```
 
 ## Structured JSON
@@ -85,6 +85,23 @@ c := a1.NewClient(key, a1.WithMeter(func(ctx context.Context, task string, m a1.
 ```
 
 The meter fires on **every billed call**, including failed attempts that still returned a response - it tracks spend, not success.
+
+## Cost
+
+Every `Meta` carries `CostUSD`, an estimate of what the call cost at list prices (no batch or cache discounts). `a1` ships a price table keyed by model family, plus a per-model row wherever one model diverges from its family. A model matching nothing is billed at the most expensive known tier - a spend guard has to overestimate, never underestimate.
+
+List prices drift, and they belong to your account and the models you actually run. Correct a row without waiting for an `a1` release:
+
+```go
+c := a1.NewClient(key, a1.WithPrices(map[string]a1.Price{
+    "claude-sonnet-5": {InUSD: 2, OutUSD: 10}, // per MTok, this model only
+    "sonnet":          {InUSD: 3, OutUSD: 15}, // the whole family
+}))
+```
+
+A key is any substring of a model id, and the longest one matching wins - so a full id beats a family, and a dated id still matches both. Anything your table doesn't price falls through to the shipped one.
+
+`c.Cost(model, inputTokens, outputTokens)` prices a call directly, for checking a projected spend before you make it; `a1.Budget` clamps an operator-configured limit to a range you declare in code.
 
 ## Errors
 
