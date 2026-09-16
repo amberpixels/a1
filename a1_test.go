@@ -41,13 +41,20 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 // newTestClient wires an a1.Client to the scripted endpoint.
 func newTestClient(t *testing.T, meter a1.Meter, responses ...string) (*a1.Client, *fakeAPI) {
 	t.Helper()
-	api := &fakeAPI{t: t, responses: responses}
-	srv := httptest.NewServer(http.HandlerFunc(api.handler))
-	t.Cleanup(srv.Close)
-	opts := []a1.Option{a1.WithSDKOptions(option.WithBaseURL(srv.URL))}
+	var opts []a1.Option
 	if meter != nil {
 		opts = append(opts, a1.WithMeter(meter))
 	}
+	return newTestClientOpts(t, opts, responses...)
+}
+
+// newTestClientOpts is newTestClient for the options a meter cannot express.
+func newTestClientOpts(t *testing.T, opts []a1.Option, responses ...string) (*a1.Client, *fakeAPI) {
+	t.Helper()
+	api := &fakeAPI{t: t, responses: responses}
+	srv := httptest.NewServer(http.HandlerFunc(api.handler))
+	t.Cleanup(srv.Close)
+	opts = append([]a1.Option{a1.WithSDKOptions(option.WithBaseURL(srv.URL))}, opts...)
 	return a1.NewClient("test-key", opts...), api
 }
 

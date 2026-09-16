@@ -20,6 +20,7 @@ package a1
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -35,7 +36,8 @@ type Meta struct {
 	StopReason   string
 	InputTokens  int64
 	OutputTokens int64
-	// CostUSD is the estimated list-price cost of the call (see Cost).
+	// CostUSD is the estimated list-price cost of the call, at the prices
+	// the client was built with (see Client.Cost and WithPrices).
 	CostUSD  float64
 	Duration time.Duration
 }
@@ -46,8 +48,9 @@ type Meter func(ctx context.Context, task string, m Meta)
 
 // Client wraps the Anthropic SDK client with metering.
 type Client struct {
-	api   anthropic.Client
-	meter Meter
+	api    anthropic.Client
+	meter  Meter
+	prices map[string]Price
 }
 
 // Option configures a Client.
@@ -56,12 +59,22 @@ type Option func(*config)
 type config struct {
 	meter   Meter
 	sdkOpts []option.RequestOption
+	prices  map[string]Price
 }
 
 // WithMeter replaces the default metering log line with a custom observer
 // (e.g. the app's own logger, or a metrics counter).
 func WithMeter(m Meter) Option {
 	return func(c *config) { c.meter = m }
+}
+
+// WithPrices overrides the model prices behind Meta.CostUSD. A key is any
+// substring of a model id - a family ("sonnet") or a full id
+// ("claude-sonnet-5") - and the longest key matching a model wins, so a
+// per-model entry beats its family. Models this table does not price fall
+// through to a1's shipped one, and then to the most expensive known tier.
+func WithPrices(prices map[string]Price) Option {
+	return func(c *config) { c.prices = prices }
 }
 
 // WithSDKOptions appends raw SDK request options to the underlying client —
@@ -80,6 +93,8 @@ func NewClient(apiKey string, opts ...Option) *Client {
 	return &Client{
 		api:   anthropic.NewClient(sdkOpts...),
 		meter: cfg.meter,
+		// Copied, so a caller mutating its map later cannot race a live call.
+		prices: maps.Clone(cfg.prices),
 	}
 }
 
