@@ -73,6 +73,26 @@ guess, meta, err := a1.JSON[Guess](ctx, c, a1.Request{
 
 `a1.Obj` requires every property by default (structured outputs reject optional-by-absence anyway) and always sets `additionalProperties: false`.
 
+### Validating the content
+
+Structured outputs guarantee the shape, not the content: `place` can come back empty, or holding a sentence of commentary. Pass `a1.Validate` and a rejected value is retried inside `Attempts`, like an empty or garbled answer. The raw response of every rejected attempt is logged, and every attempt is metered, since each one is billed.
+
+```go
+guess, meta, err := a1.JSON[Guess](ctx, c, req, schema,
+    a1.Validate(func(g *Guess) error {
+        g.Place = strings.TrimSpace(g.Place) // normalizing in place is fine
+        if g.Place == "" || strings.Contains(g.Place, ". ") {
+            return errBadPlace // retried
+        }
+        if g.Confidence == "low" {
+            return a1.Permanent(errUnsure) // resampling won't help: stop now
+        }
+        return nil
+    }))
+```
+
+A strict validator multiplies spend by up to `Attempts`. The final error wraps both `a1.ErrInvalid` and your own error, so `errors.Is` and `errors.As` match either.
+
 ## Metering
 
 The default meter logs `💥 tokens burned (Anthropic)` via `slog`. Plug in your own logger or metrics:
@@ -111,6 +131,7 @@ switch {
 case errors.Is(err, a1.ErrRefused):    // model/classifier declined - don't retry
 case errors.Is(err, a1.ErrTruncated):  // raise MaxTokens
 case errors.Is(err, a1.ErrEmpty):      // transient; raise Attempts
+case errors.Is(err, a1.ErrInvalid):    // JSON rejected by your Validate; your error is wrapped too
 case err != nil:                       // SDK error (auth, rate limit, network...)
 }
 ```

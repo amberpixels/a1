@@ -12,9 +12,10 @@
 //     errors instead of silently wrong text
 //   - response assembly: text blocks are concatenated (answers have been
 //     observed split across blocks or followed by empty ones)
-//   - retry: transient empty/truncated/garbled responses — a failure class the
-//     SDK's transport retries don't cover — are retried when Request.Attempts
-//     allows; API errors are never retried here (the SDK already does that)
+//   - retry: transient empty/truncated/garbled responses, and JSON responses
+//     the caller's Validate rejects (a failure class the SDK's transport
+//     retries don't cover), are retried when Request.Attempts allows; API
+//     errors are never retried here (the SDK already does that)
 package a1
 
 import (
@@ -129,7 +130,8 @@ type Request struct {
 	// silently skipped on models that don't, e.g. Haiku 4.5).
 	Thinking bool
 	// Attempts is how many times a transient content failure (empty,
-	// truncated, or unparseable response) is tried before giving up.
+	// truncated, or unparseable response, or one rejected by the caller's
+	// validation, see Validate) is tried before giving up.
 	// 0 or 1 means no retry. API/transport errors are never retried here.
 	Attempts int
 }

@@ -1,13 +1,16 @@
 package a1_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -35,7 +38,7 @@ func (f *fakeAPI) handler(w http.ResponseWriter, r *http.Request) {
 	resp := f.responses[0]
 	f.responses = f.responses[1:]
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(w, resp)
+	_, _ = fmt.Fprint(w, resp)
 }
 
 // newTestClient wires an a1.Client to the scripted endpoint.
@@ -189,6 +192,144 @@ func TestJSONRetriesGarbled(t *testing.T) {
 	}, a1.Obj(map[string]any{"ok": a1.Prop("ok")}))
 	if err != nil || got.OK != "yes" {
 		t.Fatalf("got, err = %+v, %v — want retry success", got, err)
+	}
+}
+
+type place struct {
+	City string   `json:"city"`
+	Tags []string `json:"tags"`
+}
+
+var (
+	placeSchema  = a1.Obj(map[string]any{"city": a1.Prop("city"), "tags": a1.Prop("tags")})
+	errNotACity  = errors.New("not a city")
+	cityResponse = func(city string, tags ...string) string {
+		b, _ := json.Marshal(place{City: city, Tags: tags})
+		return message(string(b), "end_turn")
+	}
+)
+
+// cityErr is a caller error type, for errors.As through a1's wrapping.
+type cityErr struct{ got string }
+
+func (e *cityErr) Error() string { return "bad city " + e.got }
+
+func rejectSentences(p *place) error {
+	if strings.Contains(p.City, " ") {
+		return errNotACity
+	}
+	return nil
+}
+
+func TestJSONRetriesInvalid(t *testing.T) {
+	var metered int
+	meter := func(context.Context, string, a1.Meta) { metered++ }
+	c, api := newTestClient(t, meter,
+		cityResponse("Sure, the city is Chisinau"),
+		cityResponse("Chisinau"),
+	)
+	got, _, err := a1.JSON[place](t.Context(), c, a1.Request{
+		Task: "unit", Model: "m", Prompt: "p", Attempts: 2,
+	}, placeSchema, a1.Validate(rejectSentences))
+	if err != nil || got.City != "Chisinau" {
+		t.Fatalf("got, err = %+v, %v - want retry success", got, err)
+	}
+	if len(api.requests) != 2 || metered != 2 {
+		t.Errorf("api calls = %d, meter calls = %d, want 2 and 2", len(api.requests), metered)
+	}
+}
+
+func TestJSONInvalidExhausted(t *testing.T) {
+	c, api := newTestClient(t, nil,
+		cityResponse("a b"),
+		cityResponse("c d"),
+	)
+	got, _, err := a1.JSON[place](t.Context(), c, a1.Request{
+		Task: "unit", Model: "m", Prompt: "p", Attempts: 2,
+	}, placeSchema, a1.Validate(func(p *place) error {
+		return fmt.Errorf("%w: %w", errNotACity, &cityErr{got: p.City})
+	}))
+	if got != nil {
+		t.Errorf("got = %+v, want nil", got)
+	}
+	if !errors.Is(err, a1.ErrInvalid) || !errors.Is(err, errNotACity) {
+		t.Errorf("err = %v, want ErrInvalid wrapping errNotACity", err)
+	}
+	var ce *cityErr
+	if !errors.As(err, &ce) || ce.got != "c d" {
+		t.Errorf("errors.As cityErr = %v, want the last attempt's", ce)
+	}
+	if len(api.requests) != 2 {
+		t.Errorf("api called %d times, want 2", len(api.requests))
+	}
+}
+
+func TestJSONValidatePermanent(t *testing.T) {
+	c, api := newTestClient(t, nil, cityResponse("a b"))
+	_, _, err := a1.JSON[place](t.Context(), c, a1.Request{
+		Task: "unit", Model: "m", Prompt: "p", Attempts: 3,
+	}, placeSchema, a1.Validate(func(*place) error {
+		return a1.Permanent(errNotACity)
+	}))
+	if !errors.Is(err, a1.ErrInvalid) || !errors.Is(err, errNotACity) {
+		t.Errorf("err = %v, want ErrInvalid wrapping errNotACity", err)
+	}
+	if len(api.requests) != 1 {
+		t.Errorf("api called %d times, want 1 (permanent stops the retry)", len(api.requests))
+	}
+	if a1.Permanent(nil) != nil {
+		t.Error("Permanent(nil) != nil")
+	}
+}
+
+func TestJSONValidateNormalizes(t *testing.T) {
+	c, _ := newTestClient(t, nil, cityResponse("  Chisinau "))
+	got, _, err := a1.JSON[place](t.Context(), c, a1.Request{
+		Task: "unit", Model: "m", Prompt: "p",
+	}, placeSchema, a1.Validate(func(p *place) error {
+		p.City = strings.TrimSpace(p.City)
+		return nil
+	}))
+	if err != nil || got.City != "Chisinau" {
+		t.Fatalf("got, err = %+v, %v - want the trimmed value", got, err)
+	}
+}
+
+func TestJSONFreshValuePerAttempt(t *testing.T) {
+	c, _ := newTestClient(t, nil,
+		cityResponse("a b", "stale", "leftover"),
+		cityResponse("Chisinau", "fresh"),
+	)
+	got, _, err := a1.JSON[place](t.Context(), c, a1.Request{
+		Task: "unit", Model: "m", Prompt: "p", Attempts: 2,
+	}, placeSchema, a1.Validate(rejectSentences))
+	if err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !reflect.DeepEqual(got.Tags, []string{"fresh"}) {
+		t.Errorf("tags = %v, want only the second attempt's", got.Tags)
+	}
+}
+
+func TestJSONLogsRawOnInvalid(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	c, _ := newTestClient(t, func(context.Context, string, a1.Meta) {}, cityResponse("a b"))
+	_, _, err := a1.JSON[place](t.Context(), c, a1.Request{
+		Task: "unit", Model: "m", Prompt: "p",
+	}, placeSchema, a1.Validate(rejectSentences))
+	if !errors.Is(err, a1.ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid", err)
+	}
+	logged := buf.String()
+	if !strings.Contains(logged, "a1: unusable response") || !strings.Contains(logged, "msg_test") {
+		t.Errorf("log = %q, want the raw response", logged)
+	}
+	if !strings.Contains(logged, "not a city") {
+		t.Errorf("log = %q, want the validation error", logged)
 	}
 }
 
