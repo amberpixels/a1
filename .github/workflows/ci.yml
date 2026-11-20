@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # Caches GOMODCACHE and GOCACHE, which is what keeps `just lint` from
+          # recompiling the golangci-lint engine inside standardgo on every run.
+          # Caveat since standardgo went @latest: no file here changes when it releases,
+          # so the key holds, the cache is restored but never re-saved, and every run
+          # rebuilds the engine until go.sum or the justfile changes for another reason.
+          cache-dependency-path: |
+            go.sum
+            justfile
+
+      - uses: extractions/setup-just@v4
+
+      - run: just lint test
+
+  # The floor check runs on its own so it never drags a second toolchain into the
+  # check job's cache. The version comes from the justfile, NOT from go.mod: go.mod is
+  # the thing under test, so deriving from it would make the check self-fulfilling -
+  # raising the go directive would just install a newer toolchain and pass. Pinning
+  # independently means a raised go.mod fails here until the promise is raised too.
+  floor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: extractions/setup-just@v4
+
+      - id: pin
+        run: echo "go=$(just --evaluate floor_go | sed 's/^go//')" >>"$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ steps.pin.outputs.go }}
+          cache: false
+
+      # GOTOOLCHAIN=local: use the toolchain just installed and refuse to upgrade past
+      # it, so a raised floor is an error here instead of a silent download.
+      - run: FLOOR_GO=local just floor

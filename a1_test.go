@@ -209,10 +209,10 @@ var (
 	}
 )
 
-// cityErr is a caller error type, for errors.As through a1's wrapping.
-type cityErr struct{ got string }
+// cityError is a caller error type, for errors.As through a1's wrapping.
+type cityError struct{ got string }
 
-func (e *cityErr) Error() string { return "bad city " + e.got }
+func (e *cityError) Error() string { return "bad city " + e.got }
 
 func rejectSentences(p *place) error {
 	if strings.Contains(p.City, " ") {
@@ -247,7 +247,7 @@ func TestJSONInvalidExhausted(t *testing.T) {
 	got, _, err := a1.JSON[place](t.Context(), c, a1.Request{
 		Task: "unit", Model: "m", Prompt: "p", Attempts: 2,
 	}, placeSchema, a1.Validate(func(p *place) error {
-		return fmt.Errorf("%w: %w", errNotACity, &cityErr{got: p.City})
+		return fmt.Errorf("%w: %w", errNotACity, &cityError{got: p.City})
 	}))
 	if got != nil {
 		t.Errorf("got = %+v, want nil", got)
@@ -255,9 +255,9 @@ func TestJSONInvalidExhausted(t *testing.T) {
 	if !errors.Is(err, a1.ErrInvalid) || !errors.Is(err, errNotACity) {
 		t.Errorf("err = %v, want ErrInvalid wrapping errNotACity", err)
 	}
-	var ce *cityErr
+	var ce *cityError
 	if !errors.As(err, &ce) || ce.got != "c d" {
-		t.Errorf("errors.As cityErr = %v, want the last attempt's", ce)
+		t.Errorf("errors.As cityError = %v, want the last attempt's", ce)
 	}
 	if len(api.requests) != 2 {
 		t.Errorf("api called %d times, want 2", len(api.requests))

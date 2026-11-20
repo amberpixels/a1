@@ -1,0 +1,16 @@
+version: 2
+
+updates:
+  # standardgo is not covered here and cannot be: it is a `go run` in the justfile, in
+  # no go.mod at all. It is tracked at @latest for that reason.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

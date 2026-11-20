@@ -49,7 +49,13 @@ func Validate[T any](fn func(*T) error) JSONOption[T] {
 // build it with Obj/Prop/Enum or by hand; keep property descriptions rich,
 // they steer the model as much as the prompt does. A Validate option checks
 // the decoded value; a rejected one fails with ErrInvalid.
-func JSON[T any](ctx context.Context, c *Client, req Request, schema map[string]any, opts ...JSONOption[T]) (*T, Meta, error) {
+func JSON[T any](
+	ctx context.Context,
+	c *Client,
+	req Request,
+	schema map[string]any,
+	opts ...JSONOption[T],
+) (*T, Meta, error) {
 	var cfg jsonConfig[T]
 	for _, opt := range opts {
 		opt(&cfg)
@@ -109,13 +115,17 @@ func (c *Client) withRetry(ctx context.Context, req Request, fn func() error) er
 // once performs a single billed API call: build params, call, meter, map the
 // stop reason, assemble the text. The raw message is returned (nil on an API
 // error) so callers can log it when a later check rejects the text.
-func (c *Client) once(ctx context.Context, req Request, schema map[string]any) (string, Meta, *anthropic.Message, error) {
+func (c *Client) once(
+	ctx context.Context,
+	req Request,
+	schema map[string]any,
+) (string, Meta, *anthropic.Message, error) {
 	maxTokens := req.MaxTokens
 	if maxTokens == 0 {
 		maxTokens = DefaultMaxTokens
 	}
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(req.Model),
+		Model:     req.Model,
 		MaxTokens: maxTokens,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(req.Prompt)),
@@ -155,6 +165,8 @@ func (c *Client) once(ctx context.Context, req Request, schema map[string]any) (
 		return "", meta, msg, ErrRefused
 	case anthropic.StopReasonMaxTokens:
 		return "", meta, msg, retryable{ErrTruncated}
+	default:
+		// Every other stop reason falls through to the text checks below.
 	}
 
 	// Concatenate every text block: the answer is normally one block, but it
